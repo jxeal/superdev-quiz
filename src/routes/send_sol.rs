@@ -2,15 +2,14 @@ use axum::{Json, response::IntoResponse, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use bs58;
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
+    instruction::{Instruction},
     pubkey::Pubkey,
-    system_program,
     system_instruction,
 };
 
 use crate::routes::keypair::ApiResponse;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct SendSolRequest {
     pub from: String,
     pub to: String,
@@ -27,7 +26,20 @@ pub struct SendSolResponse {
 pub async fn send_sol(
     Json(body): Json<SendSolRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiResponse<()>>)> {
-    // Parse `from` public key
+    if body.from.trim().is_empty() || body.to.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Both sender and recipient public keys are required")),
+        ));
+    }
+
+    if body.lamports == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Lamports must be greater than 0")),
+        ));
+    }
+
     let from_pubkey = bs58::decode(&body.from)
         .into_vec()
         .map_err(|_| {
@@ -45,7 +57,6 @@ pub async fn send_sol(
             })
         })?;
 
-    // Parse `to` public key
     let to_pubkey = bs58::decode(&body.to)
         .into_vec()
         .map_err(|_| {
@@ -63,7 +74,6 @@ pub async fn send_sol(
             })
         })?;
 
-    // Create transfer instruction
     let instruction: Instruction = system_instruction::transfer(&from_pubkey, &to_pubkey, body.lamports);
 
     let account_addresses: Vec<String> = instruction

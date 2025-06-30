@@ -7,7 +7,7 @@ use base64;
 
 use crate::routes::keypair::ApiResponse;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct MintTokenRequest {
     pub mint: String,
     pub destination: String,
@@ -32,16 +32,32 @@ pub struct TokenInstructionResponse {
 pub async fn mint_token(
     Json(body): Json<MintTokenRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiResponse<()>>)> {
-    let mint = parse_pubkey(&body.mint)?;
-    let dest = parse_pubkey(&body.destination)?;
-    let authority = parse_pubkey(&body.authority)?;
+    if body.mint.trim().is_empty()
+        || body.destination.trim().is_empty()
+        || body.authority.trim().is_empty()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("All fields (mint, destination, authority) are required")),
+        ));
+    }
 
+    if body.amount == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Amount must be greater than 0")),
+        ));
+    }
+
+    let mint = parse_pubkey(&body.mint, "mint")?;
+    let dest = parse_pubkey(&body.destination, "destination")?;
+    let authority = parse_pubkey(&body.authority, "authority")?;
     let instruction = mint_to(
         &spl_token::id(),
         &mint,
         &dest,
         &authority,
-        &[], // multisig signer pubkeys (empty for single authority)
+        &[],
         body.amount,
     )
     .map_err(|e| {
@@ -68,11 +84,11 @@ pub async fn mint_token(
     Ok(Json(ApiResponse::success(response)))
 }
 
-fn parse_pubkey(key: &str) -> Result<Pubkey, (StatusCode, Json<ApiResponse<()>>)> {
+fn parse_pubkey(key: &str, field_name: &str) -> Result<Pubkey, (StatusCode, Json<ApiResponse<()>>)> {
     Pubkey::from_str(key).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::error("Invalid base58 public key")),
+            Json(ApiResponse::error(&format!("Invalid base58 public key in field: {}", field_name))),
         )
     })
 }

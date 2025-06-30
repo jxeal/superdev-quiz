@@ -10,7 +10,7 @@ use base64;
 
 use crate::routes::keypair::ApiResponse;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct CreateTokenRequest {
     #[serde(rename = "mintAuthority")]
     pub mint_authority: String,
@@ -38,6 +38,20 @@ pub struct TokenInstructionResponse {
 pub async fn create_token(
     Json(body): Json<CreateTokenRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiResponse<()>>)> {
+    if body.mint.trim().is_empty() || body.mint_authority.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Mint and Mint Authority fields cannot be empty")),
+        ));
+    }
+
+    if body.decimals > 18 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Decimals must be between 0 and 18")),
+        ));
+    }
+
     let mint_pubkey = parse_pubkey(&body.mint)?;
     let mint_authority = parse_pubkey(&body.mint_authority)?;
 

@@ -6,7 +6,7 @@ use bs58;
 
 use crate::routes::keypair::ApiResponse;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct SignMessageRequest {
     pub message: String,
     pub secret: String, // base58-encoded 64-byte secret key
@@ -22,7 +22,13 @@ pub struct SignMessageResponse {
 pub async fn sign_message(
     Json(body): Json<SignMessageRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiResponse<()>>)> {
-    // Decode the base58 secret key
+    if body.message.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error("Message must not be empty")),
+        ));
+    }
+
     let secret_bytes = bs58::decode(&body.secret)
         .into_vec()
         .map_err(|_| {
@@ -39,7 +45,6 @@ pub async fn sign_message(
         ));
     }
 
-    // Create Keypair from bytes
     let keypair = Keypair::from_bytes(&secret_bytes).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -47,7 +52,6 @@ pub async fn sign_message(
         )
     })?;
 
-    // Sign the message
     let signature = keypair.sign_message(body.message.as_bytes());
     let response = SignMessageResponse {
         signature: base64::encode(signature.as_ref()),
